@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Platform Location Optimizer</title>
+<style>
+  :root{
+    --bg:#EEF1F4; --panel:#FFFFFF; --ink:#1E2A38; --muted:#5B6B7C; --line:#D5DBE2;
+    --target:#378ADD; --opt:#0F6E56; --cen:#E8590C; --cand:#993556; --yellow:#FFF7CC;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Segoe UI",system-ui,-apple-system,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.45}
+  header{background:var(--ink);color:#fff;padding:16px 22px}
+  header h1{margin:0;font-size:19px;font-weight:600;letter-spacing:.2px}
+  header p{margin:4px 0 0;color:#B8C4D0;font-size:13px}
+  main{display:grid;grid-template-columns:minmax(320px,430px) 1fr;gap:16px;padding:16px;max-width:1500px;margin:0 auto}
+  @media (max-width:900px){main{grid-template-columns:1fr}}
+  section{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:14px 16px}
+  h2{font-size:14px;font-weight:600;margin:0 0 10px;color:var(--ink)}
+  h2 small{font-weight:400;color:var(--muted);margin-left:6px}
+  table{border-collapse:collapse;width:100%}
+  th,td{border-bottom:1px solid var(--line);padding:4px 6px;text-align:right;white-space:nowrap}
+  th{font-weight:600;color:var(--muted);font-size:12px;text-align:right}
+  th:first-child,td:first-child{text-align:left}
+  input[type=text],input[type=number],textarea{font:inherit;width:100%;border:1px solid var(--line);border-radius:4px;padding:4px 6px;background:var(--yellow);color:var(--ink)}
+  input[type=number]{text-align:right}
+  input:focus,textarea:focus{outline:2px solid var(--target);outline-offset:0}
+  .edit td{padding:2px 3px}
+  .edit input{min-width:70px}
+  .edit .nm input{min-width:64px}
+  .x{background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1;padding:2px 6px}
+  .x:hover{color:#C0392B}
+  .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center}
+  button.b{font:inherit;border:1px solid var(--line);background:#F6F8FA;color:var(--ink);padding:6px 12px;border-radius:4px;cursor:pointer}
+  button.b:hover{background:#E9EEF3}
+  button.primary{background:var(--opt);border-color:var(--opt);color:#fff;font-weight:600}
+  button.primary:hover{background:#0B5643}
+  textarea{height:110px;font-family:Consolas,Menlo,monospace;font-size:12px;background:#fff}
+  .hint{color:var(--muted);font-size:12px;margin:6px 0 0}
+  .summary td.lbl{font-weight:600}
+  .summary tr.opt td{background:#E3F1EC}
+  .summary tr.cen td{background:#FDEFE6}
+  .chip{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:middle}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin:6px 0}
+  svg{width:100%;height:auto;display:block;border:1px solid var(--line);border-radius:4px;background:#fff}
+  .err{color:#C0392B;font-size:13px;margin-top:8px}
+  label.tog{font-size:13px;color:var(--muted);display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+  .scroll{max-height:360px;overflow:auto}
+  .num{font-variant-numeric:tabular-nums}
+</style>
+</head>
+<body>
+<header>
+  <h1>Platform Location Optimizer</h1>
+  <p>Finds the surface platform location that minimizes total slant distance to all reservoir targets. Works offline — nothing leaves this file.</p>
+</header>
+
+<main>
+  <div style="display:flex;flex-direction:column;gap:16px">
+    <section>
+      <h2>Reservoir targets <small>X = Easting (mE) · Y = Northing (mN) · TVD (m), platform at TVD 0</small></h2>
+      <div class="scroll">
+      <table class="edit" id="tt">
+        <thead><tr><th>Well</th><th>X (mE)</th><th>Y (mN)</th><th>TVD (m)</th><th></th></tr></thead>
+        <tbody id="tb"></tbody>
+      </table>
+      </div>
+      <div class="row">
+        <button class="b" id="addT">+ Add target</button>
+        <button class="b" id="pasteT">Paste from Excel</button>
+        <button class="b" id="clearT">Clear all</button>
+
+      </div>
+      <div id="pasteBox" style="display:none;margin-top:10px">
+        <textarea id="pasteArea" placeholder="Paste rows as: Well  X  Y  TVD  (tab, comma or space separated, one target per line). TVD may be omitted."></textarea>
+        <div class="row"><button class="b primary" id="pasteGo">Load pasted rows</button><button class="b" id="pasteCancel">Cancel</button></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Candidate platforms <small>optional, up to 5 — compared against the optimum</small></h2>
+      <table class="edit" id="ct">
+        <thead><tr><th>Name</th><th>X (mE)</th><th>Y (mN)</th><th></th></tr></thead>
+        <tbody id="cb"></tbody>
+      </table>
+      <div class="row"><button class="b" id="addC">+ Add candidate</button></div>
+    </section>
+
+    <section>
+      <div class="row" style="margin-top:0">
+        <button class="b primary" id="run">Compute optimum</button>
+        <button class="b" id="dl" disabled>Download results (CSV)</button>
+      </div>
+      <div class="err" id="err"></div>
+      <p class="hint">Method: geometric median by Weiszfeld iteration (starts at the centroid, stops when the move is below 0.001 m). Centroid is shown as the quick estimate.</p>
+    </section>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:16px">
+    <section>
+      <h2>Summary</h2>
+      <div style="overflow:auto">
+      <table class="summary num" id="sum">
+        <thead><tr><th>Location</th><th>X (mE)</th><th>Y (mN)</th><th>Total horizontal (m)</th><th>Total slant (m)</th><th>Max horiz. reach</th><th>Slant vs optimum</th></tr></thead>
+        <tbody id="sb"><tr><td colspan="7" style="text-align:center;color:var(--muted)">Press “Compute optimum”.</td></tr></tbody>
+      </table>
+      </div>
+    </section>
+
+    <section>
+      <h2>Plan view</h2>
+      <div class="legend">
+        <span><span class="chip" style="background:var(--target)"></span>Targets</span>
+        <span><span class="chip" style="background:var(--opt);border-radius:2px;transform:rotate(45deg)"></span>Optimum (Weiszfeld)</span>
+        <span><span class="chip" style="background:var(--cen);border-radius:0;clip-path:polygon(50% 0,100% 100%,0 100%)"></span>Centroid</span>
+        <span><span class="chip" style="background:var(--cand);border-radius:2px"></span>Candidates</span>
+        <label class="tog"><input type="checkbox" id="lines" checked> connector lines from optimum</label>
+      </div>
+      <svg id="plot" viewBox="0 0 800 800" role="img" aria-label="Plan view of targets and platform locations"></svg>
+    </section>
+
+    <section>
+      <h2>Per-well distances <small>metres</small></h2>
+      <div class="scroll" style="max-height:420px">
+      <table class="num" id="pw"><thead id="pwh"></thead><tbody id="pwb"></tbody></table>
+      </div>
+    </section>
+  </div>
+</main>
+
+<script>
+// No demo data ships with this file — add your own targets via the UI,
+// or use "Paste from Excel". See README.md for the input format.
+
+const $ = id => document.getElementById(id);
+const tb = $("tb"), cb = $("cb");
+let lastResult = null;
+
+function targetRow(n="",x="",y="",z=""){
+  const tr = document.createElement("tr");
+  tr.innerHTML = `<td class="nm"><input type="text" value="${n}" placeholder="name"></td>
+    <td><input type="number" step="any" value="${x}"></td>
+    <td><input type="number" step="any" value="${y}"></td>
+    <td><input type="number" step="any" value="${z}" placeholder="0"></td>
+    <td><button class="x" title="Remove">×</button></td>`;
+  tr.querySelector(".x").onclick = () => { tr.remove(); };
+  tb.appendChild(tr);
+}
+function candRow(n="",x="",y=""){
+  if (cb.children.length >= 5) return;
+  const tr = document.createElement("tr");
+  tr.innerHTML = `<td class="nm"><input type="text" value="${n}" placeholder="name"></td>
+    <td><input type="number" step="any" value="${x}"></td>
+    <td><input type="number" step="any" value="${y}"></td>
+    <td><button class="x" title="Remove">×</button></td>`;
+  tr.querySelector(".x").onclick = () => { tr.remove(); };
+  cb.appendChild(tr);
+}
+function readTargets(){
+  const out = [];
+  for (const tr of tb.children){
+    const [n,x,y,z] = [...tr.querySelectorAll("input")].map(i=>i.value.trim());
+    if (x==="" || y==="") continue;
+    const X=+x, Y=+y, Z = z==="" ? 0 : +z;
+    if (!isFinite(X)||!isFinite(Y)||!isFinite(Z)) continue;
+    out.push({n: n || ("T"+(out.length+1)), x:X, y:Y, z:Z});
+  }
+  return out;
+}
+function readCands(){
+  const out = [];
+  for (const tr of cb.children){
+    const [n,x,y] = [...tr.querySelectorAll("input")].map(i=>i.value.trim());
+    if (x==="" || y==="") continue;
+    if (!isFinite(+x)||!isFinite(+y)) continue;
+    out.push({n: n || ("Cand "+(out.length+1)), x:+x, y:+y});
+  }
+  return out;
+}
+
+// --- maths ---
+const slant = (p,t) => Math.sqrt((p.x-t.x)**2 + (p.y-t.y)**2 + t.z**2);
+const horiz = (p,t) => Math.hypot(p.x-t.x, p.y-t.y);
+function centroid(T){ return {x: T.reduce((s,t)=>s+t.x,0)/T.length, y: T.reduce((s,t)=>s+t.y,0)/T.length}; }
+function weiszfeld(T){
+  let p = centroid(T), it = 0, move = 0;
+  for (it=1; it<=500; it++){
+    let nx=0, ny=0, den=0, hit=false;
+    for (const t of T){ const d = slant(p,t); if (d < 1e-9){ hit=true; break; } nx += t.x/d; ny += t.y/d; den += 1/d; }
+    if (hit) break;
+    const q = {x:nx/den, y:ny/den};
+    move = Math.hypot(q.x-p.x, q.y-p.y); p = q;
+    if (move < 1e-3) break;
+  }
+  return {p, it, move};
+}
+function stats(p,T){
+  const h = T.map(t=>horiz(p,t)), s = T.map(t=>slant(p,t));
+  const mi = h.indexOf(Math.max(...h));
+  return {h, s, hs: h.reduce((a,b)=>a+b,0), ss: s.reduce((a,b)=>a+b,0), maxH: h[mi], maxW: T[mi].n};
+}
+
+// --- run ---
+const f0 = v => v.toLocaleString(undefined,{maximumFractionDigits:0});
+const f1 = v => v.toLocaleString(undefined,{minimumFractionDigits:1,maximumFractionDigits:1});
+const f2 = v => v.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+
+function run(){
+  $("err").textContent = "";
+  const T = readTargets();
+  if (T.length < 2){ $("err").textContent = "Enter at least 2 targets with numeric X and Y."; return; }
+  const C = readCands();
+  const w = weiszfeld(T), c = centroid(T);
+  const locs = [
+    {key:"opt", n:"Optimum (Weiszfeld)", p:w.p, note:`${w.it} iterations, last move ${w.move.toFixed(4)} m`},
+    {key:"cen", n:"Centroid (mean)", p:c},
+    ...C.map(k=>({key:"cand", n:k.n, p:{x:k.x,y:k.y}}))
+  ];
+  for (const L of locs) L.st = stats(L.p, T);
+  lastResult = {T, locs};
+  renderSummary(locs); renderPerWell(T, locs); renderPlot(T, locs);
+  $("dl").disabled = false;
+}
+function renderSummary(locs){
+  const ref = locs[0].st.ss;
+  $("sb").innerHTML = locs.map(L=>`<tr class="${L.key}">
+    <td class="lbl">${L.n}${L.note?`<div style="font-weight:400;font-size:11px;color:var(--muted)">${L.note}</div>`:""}</td>
+    <td>${f2(L.p.x)}</td><td>${f2(L.p.y)}</td><td>${f1(L.st.hs)}</td><td>${f1(L.st.ss)}</td>
+    <td>${f1(L.st.maxH)} <span style="color:var(--muted);font-size:11px">(${L.st.maxW})</span></td>
+    <td>${L.key==="opt"?"—":((L.st.ss/ref-1)*100).toFixed(2)+" %"}</td></tr>`).join("");
+}
+function renderPerWell(T, locs){
+  $("pwh").innerHTML = "<tr><th>Well</th>" + locs.map(L=>`<th>Horiz → ${L.n.replace(" (Weiszfeld)","").replace(" (mean)","")}</th><th>Slant → ${L.n.replace(" (Weiszfeld)","").replace(" (mean)","")}</th>`).join("") + "</tr>";
+  $("pwb").innerHTML = T.map((t,i)=>`<tr><td>${t.n}</td>` + locs.map(L=>`<td>${f1(L.st.h[i])}</td><td>${f1(L.st.s[i])}</td>`).join("") + "</tr>").join("");
+}
+
+// --- plot ---
+function renderPlot(T, locs){
+  const W=800,H=800,pad=70;
+  const xs=[...T.map(t=>t.x),...locs.map(L=>L.p.x)], ys=[...T.map(t=>t.y),...locs.map(L=>L.p.y)];
+  let minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys);
+  if (maxX-minX<1){minX-=1;maxX+=1} if (maxY-minY<1){minY-=1;maxY+=1}
+  const mg=Math.max(maxX-minX,maxY-minY)*0.14; minX-=mg;maxX+=mg;minY-=mg;maxY+=mg;
+  const span=Math.max(maxX-minX,maxY-minY), cx=(minX+maxX)/2, cy=(minY+maxY)/2;
+  minX=cx-span/2;maxX=cx+span/2;minY=cy-span/2;maxY=cy+span/2;
+  const sx=x=>pad+(x-minX)/(maxX-minX)*(W-2*pad), sy=y=>H-pad-(y-minY)/(maxY-minY)*(H-2*pad);
+  let s="";
+  for (let i=0;i<=5;i++){
+    const gx=pad+i*(W-2*pad)/5, gy=pad+i*(H-2*pad)/5;
+    s+=`<line x1="${gx}" y1="${pad}" x2="${gx}" y2="${H-pad}" stroke="#E5E9EE"/><line x1="${pad}" y1="${gy}" x2="${W-pad}" y2="${gy}" stroke="#E5E9EE"/>`;
+    s+=`<text x="${gx}" y="${H-pad+20}" font-size="11" fill="#5B6B7C" text-anchor="middle">${f0(minX+i*(maxX-minX)/5)}</text>`;
+    s+=`<text x="${pad-8}" y="${gy+4}" font-size="11" fill="#5B6B7C" text-anchor="end">${f0(maxY-i*(maxY-minY)/5)}</text>`;
+  }
+  s+=`<text x="${W/2}" y="${H-18}" font-size="12" fill="#1E2A38" text-anchor="middle">Easting or X (mE)</text>`;
+  s+=`<text x="16" y="${H/2}" font-size="12" fill="#1E2A38" text-anchor="middle" transform="rotate(-90 16 ${H/2})">Northing or Y (mN)</text>`;
+  const opt=locs[0].p, ox=sx(opt.x), oy=sy(opt.y);
+  if ($("lines").checked) for (const t of T) s+=`<line x1="${sx(t.x)}" y1="${sy(t.y)}" x2="${ox}" y2="${oy}" stroke="#0F6E56" stroke-width="1" stroke-dasharray="4,3" opacity=".5"/>`;
+  for (const t of T){ const px=sx(t.x),py=sy(t.y); s+=`<circle cx="${px}" cy="${py}" r="6" fill="#378ADD" stroke="#fff" stroke-width="1.5"/><text x="${px+8}" y="${py-7}" font-size="11" fill="#1E2A38">${t.n}</text>`; }
+  for (const L of locs){
+    const px=sx(L.p.x),py=sy(L.p.y);
+    if (L.key==="cand") s+=`<rect x="${px-6}" y="${py-6}" width="12" height="12" fill="#993556" stroke="#fff" stroke-width="1.5"/><text x="${px+10}" y="${py+4}" font-size="12" font-weight="600" fill="#993556">${L.n}</text>`;
+    else if (L.key==="cen") s+=`<polygon points="${px},${py-9} ${px+8},${py+6} ${px-8},${py+6}" fill="#E8590C" stroke="#fff" stroke-width="1.5"/><text x="${px+11}" y="${py+13}" font-size="12" font-weight="600" fill="#E8590C">Centroid</text>`;
+  }
+  const r=11; s+=`<path d="M ${ox} ${oy-r} L ${ox+r*.3} ${oy-r*.3} L ${ox+r} ${oy} L ${ox+r*.3} ${oy+r*.3} L ${ox} ${oy+r} L ${ox-r*.3} ${oy+r*.3} L ${ox-r} ${oy} L ${ox-r*.3} ${oy-r*.3} Z" fill="#0F6E56" stroke="#fff" stroke-width="1.5"/><text x="${ox+14}" y="${oy-6}" font-size="12" font-weight="600" fill="#0F6E56">Optimum</text>`;
+  $("plot").innerHTML = s;
+}
+
+// --- CSV ---
+function downloadCSV(){
+  if (!lastResult) return;
+  const {T, locs} = lastResult;
+  const q = v => `"${String(v).replace(/"/g,'""')}"`;
+  const lines = ["Summary"];
+  lines.push(["Location","X (mE)","Y (mN)","Total horizontal (m)","Total slant (m)","Max horizontal reach (m)","Max reach well","Slant vs optimum (%)"].map(q).join(","));
+  for (const L of locs) lines.push([L.n,L.p.x.toFixed(2),L.p.y.toFixed(2),L.st.hs.toFixed(1),L.st.ss.toFixed(1),L.st.maxH.toFixed(1),L.st.maxW,((L.st.ss/locs[0].st.ss-1)*100).toFixed(3)].map(q).join(","));
+  lines.push("","Per-well distances (m)");
+  lines.push(["Well","X","Y","TVD",...locs.flatMap(L=>[`Horiz to ${L.n}`,`Slant to ${L.n}`])].map(q).join(","));
+  T.forEach((t,i)=>lines.push([t.n,t.x,t.y,t.z,...locs.flatMap(L=>[L.st.h[i].toFixed(1),L.st.s[i].toFixed(1)])].map(q).join(",")));
+  const blob = new Blob([lines.join("\n")],{type:"text/csv"});
+  const a = document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="platform_optimizer_results.csv"; a.click(); URL.revokeObjectURL(a.href);
+}
+
+// --- wiring ---
+$("addT").onclick = ()=>targetRow();
+$("addC").onclick = ()=>candRow();
+$("clearT").onclick = ()=>{ tb.innerHTML=""; targetRow(); };
+$("pasteT").onclick = ()=>{ $("pasteBox").style.display="block"; $("pasteArea").focus(); };
+$("pasteCancel").onclick = ()=>{ $("pasteBox").style.display="none"; };
+$("pasteGo").onclick = ()=>{
+  const rows = $("pasteArea").value.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  let added = 0;
+  for (const l of rows){
+    const parts = l.split(/\t|,|;|\s{2,}|\s+/).map(p=>p.trim()).filter(Boolean);
+    if (parts.length < 3) continue;
+    let name, x, y, z="";
+    if (isFinite(+parts[0])){ [x,y] = parts; z = parts[2] ?? ""; name = "T"+(tb.children.length+1); }
+    else { name = parts[0]; x = parts[1]; y = parts[2]; z = parts[3] ?? ""; }
+    if (!isFinite(+x) || !isFinite(+y)) continue;
+    targetRow(name, x, y, z); added++;
+  }
+  $("pasteBox").style.display="none"; $("pasteArea").value="";
+  $("err").textContent = added ? "" : "No valid rows found. Use: Well  X  Y  TVD, one per line.";
+};
+$("run").onclick = run;
+$("dl").onclick = downloadCSV;
+$("lines").onchange = ()=>{ if (lastResult) renderPlot(lastResult.T, lastResult.locs); };
+document.addEventListener("keydown", e=>{ if ((e.ctrlKey||e.metaKey) && e.key==="Enter") run(); });
+
+// Start with 2 blank target rows so the table isn't empty on first load.
+targetRow(); targetRow();
+</script>
+</body>
+</html>
