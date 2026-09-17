@@ -45,4 +45,3 @@ Assumes a single consistent projected coordinate system across all inputs.
 Data privacy
 No sample or demo data ships with this file. It opens with two blank rows — add your own targets via the UI or Paste from Excel. Nothing is saved, cached, or transmitted anywhere; all computation happens locally in your browser, and closing the tab clears everything.
 License
-MIT — see LICENSE.
