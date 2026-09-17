@@ -1,4 +1,5 @@
 Platform Location Optimizer : for demo : https://chulakorn.github.io/platform-location-optimizer/
+
 A single-file, offline web app that finds the surface platform location minimizing total slant distance to a set of reservoir/well targets — useful for early-stage platform siting, well-cluster planning, and comparing candidate locations against the mathematical optimum.
 No build step, no dependencies, no server, no data leaves your browser. Open `index.html` and go.
 Live demo (enable GitHub Pages — see below — and put the link here)
